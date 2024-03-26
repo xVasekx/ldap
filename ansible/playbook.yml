@@ -1,0 +1,121 @@
+---
+- name: Base set up
+  hosts: all
+  #Выполнять действия от root-пользователя
+  become: yes
+  tags: all
+  tasks:
+  #Установка текстового редактора Vim и chrony
+  - name: install softs on CentOS
+    yum:
+      name:
+        - vim
+        - chrony
+      state: present
+      update_cache: true 
+    when: (ansible_os_family == "RedHat")
+
+  - name: install softs on Debian
+    apt:
+      name:
+        - vim
+        - chrony
+      state: present
+      update_cache: true 
+    when: (ansible_os_family == "Debian")
+
+
+  #Отключение firewalld и удаление его из автозагрузки
+  - name: disable firewalld
+    service:
+      name: firewalld
+      state: stopped
+      enabled: false
+    when: (ansible_os_family == "RedHat")
+  
+  #Отключение SElinux из автозагрузки
+  #Будет применено после перезагрузки
+  - name: disable SElinux
+    selinux:
+      state: disabled
+    when: (ansible_os_family == "RedHat")
+  
+  #Отключение SElinux до перезагрузки
+  - name: disable SElinux now
+    shell: setenforce 0
+    when: (ansible_os_family == "RedHat")
+
+  #Установка временной зоны Европа/Москва    
+  - name: Set up timezone
+    timezone:
+      name: "Europe/Moscow"
+  
+  #Запуск службы Chrony, добавление её в автозагрузку
+  - name: enable chronyd
+    service:
+      name: chronyd
+      state: restarted
+      enabled: true
+    when: (ansible_os_family == "RedHat")
+
+  - name: enable chrony
+    service:
+      name: chrony
+      state: restarted
+      enabled: true
+    when: (ansible_os_family == "Debian")
+   
+  #Копирование файла /etc/hosts c правами root:root 0644
+  - name: change /etc/hosts
+    template:
+      src: hosts.j2
+      dest: /etc/hosts
+      owner: root
+      group: root
+      mode: 0644
+ 
+- name: Server ipa
+  hosts: server
+  #Выполнять действия от root-пользователя
+  become: yes
+  tags: server
+  tasks: 
+  #Установка сервера Freeipa
+  - name: install module ipa-server
+    yum:
+      name:
+        - '@idm:DL1'
+        - ipa-server
+      state: present
+      update_cache: true
+      
+        #  - name: add ipa-server
+        #    shell: echo -e "yes\nyes" | ipa-server-install --mkhomedir --no-host-dns --domain=TEST.LAN --no-ntp -p test2024 -a test2024
+ 
+- name: Client ipa
+  hosts: clients
+  #Выполнять действия от root-пользователя
+  become: yes
+  tags: clients
+  tasks: 
+  #Установка клиента Freeipa
+  - name: install module ipa-client
+    yum:
+      name:
+        - freeipa-client
+      state: present
+      update_cache: true
+    when: (ansible_os_family == "RedHat")
+   
+  - name: install module ipa-client
+    apt:
+      name:
+        - freeipa-client
+      state: present
+      update_cache: true
+    when: (ansible_os_family == "Debian")   
+
+  
+  #Запуск скрипта добавления хоста к серверу
+  #  - name: add host to ipa-server
+  #    shell: echo -e "yes\nyes" | ipa-client-install --mkhomedir --domain=TEST.LAN --server=ipa.test.lan --no-ntp -p admin -w test2024
